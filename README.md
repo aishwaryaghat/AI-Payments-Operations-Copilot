@@ -11,7 +11,7 @@ Client
 Python FastAPI (/ask, /rag/ask, /analytics)
   |-- JWT verification: demo HS256 or externally issued OIDC RS256/JWKS
   |-- RBAC: analyst and viewer; analysts can query payment aggregates
-  |-- /rag/ask: Sentence Transformers embeddings, top-K similarity search,
+  |-- /rag/ask: Sentence Transformers embeddings, persistent local FAISS top-K vector index,
   |              grounded OpenAI-compatible LLM inference and source IDs
   |-- /ask: offline TF-IDF runbook-retrieval fallback with citations
   |-- /analytics: strictly allowlisted parameterized SQL aggregations
@@ -25,7 +25,7 @@ Python FastAPI (/ask, /rag/ask, /analytics)
 | --- | --- |
 | Python API | FastAPI + Pydantic validation + OpenAPI docs |
 | Java integration | Spring Boot gateway under `gateway/` |
-| RAG embeddings | Sentence Transformers, configurable model; locally computed similarity ranking |
+| RAG embeddings | Sentence Transformers + local FAISS cosine-equivalent inner-product index persisted to disk |
 | LLM answers | OpenAI-compatible chat-completions client; requires configured API key |
 | Retrieval fallback | TF-IDF runbook search and source citations at `/ask` |
 | Payment analytics | PostgreSQL / offline SQLite, allowlisted parameterized queries |
@@ -81,7 +81,7 @@ export OPENAI_API_KEY="YOUR_API_KEY"
 uvicorn app.main:app --reload
 ```
 
-Call `POST /rag/ask` with `{"question":"How should a rejected ACH file be investigated?","top_k":3}` and a bearer token. The default embedding model is `sentence-transformers/all-MiniLM-L6-v2`; it downloads its weights on first use. Without an API key the endpoint still performs embedding retrieval and returns evidence/citations, but not a generative answer. LLM provider access can incur costs. Do not send customer information to an external model.
+Call `POST /rag/ask` with `{"question":"How should a rejected ACH file be investigated?","top_k":3}` and a bearer token. The default embedding model is `sentence-transformers/all-MiniLM-L6-v2`; it downloads its weights on first use. FAISS saves a local vector index under `.copilot_vectors/` (configurable using `COPILOT_VECTOR_DIR`) for the synthetic corpus. Without an API key the endpoint still performs embedding retrieval and returns evidence/citations, but not a generative answer. LLM provider access can incur costs. Do not send customer information to an external model.
 
 ## PostgreSQL analytics and persistent audit
 
@@ -117,6 +117,6 @@ GitHub Actions executes the default Python test suite on pushes and pull request
 
 ## Scope and deployment notes
 
-This repository is an inspectable demonstration using **synthetic-only data**. The existing vector retrieval computes embedding similarity over a small, in-memory runbook collection, rather than using a separate persistent vector database. Output citations identify retrieved passages, but generated claims are not independently verified sentence by sentence. The Java gateway currently delegates token verification to FastAPI. OIDC requires real identity-provider configuration, and externally hosted LLM generation requires provider credentials. PII filtering and prompt-injection screening are basic defenses, not a substitute for end-to-end security reviews. Further work for production includes document-level/tenant-level authorization, dedicated database accounts, full observability, adversarial evaluation and independent grounding checks.
+This repository is an inspectable demonstration using **synthetic-only data**. The embedding RAG uses a persistent local FAISS index for a small synthetic runbook collection, not a horizontally scalable hosted vector database. Output citations identify retrieved passages, but generated claims are not independently verified sentence by sentence. The Java gateway currently delegates token verification to FastAPI. OIDC requires real identity-provider configuration, and externally hosted LLM generation requires provider credentials. PII filtering and prompt-injection screening are basic defenses, not a substitute for end-to-end security reviews. Further work for production includes document-level/tenant-level authorization, dedicated database accounts, full observability, adversarial evaluation and independent grounding checks.
 
 See `docs/architecture.md` for implementation details and the remaining hardening work.
