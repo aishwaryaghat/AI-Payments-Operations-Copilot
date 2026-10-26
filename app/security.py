@@ -1,4 +1,5 @@
 import os
+import secrets
 import re
 from datetime import datetime, timedelta, timezone
 import jwt
@@ -12,14 +13,19 @@ USERS = {"analyst": {"password": "demo-analyst-password", "role": "analyst"},
          "viewer": {"password": "demo-viewer-password", "role": "viewer"}}
 
 def issue_token(username: str, password: str) -> str:
+    if os.getenv("COPILOT_AUTH_MODE", "demo") != "demo":
+        raise HTTPException(status_code=403, detail="Use external OIDC authentication")
     user = USERS.get(username)
-    if not user or user["password"] != password:
+    if not user or not secrets.compare_digest(user["password"], password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     payload = {"sub": username, "role": user["role"],
                "exp": datetime.now(timezone.utc) + timedelta(minutes=30)}
     return jwt.encode(payload, SECRET, algorithm=ALGORITHM)
 
 def current_user(token: str = Depends(oauth)) -> dict:
+    if os.getenv("COPILOT_AUTH_MODE", "demo") == "oidc":
+        from .oidc import verify_external_token
+        return verify_external_token(token)
     try:
         claims = jwt.decode(token, SECRET, algorithms=[ALGORITHM], options={"require": ["sub", "exp"]})
     except jwt.PyJWTError:
