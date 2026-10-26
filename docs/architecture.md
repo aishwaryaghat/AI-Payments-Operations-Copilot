@@ -1,31 +1,37 @@
-# Architecture, threat model and roadmap
+# Architecture, security boundaries and next steps
 
-## Current implementation (demo)
-- Python FastAPI authentication and request validation.
-- JWT and two hard-coded sample users for **local demonstration only**.
-- Local TF-IDF retriever at `POST /ask`.
-- Optional Sentence Transformers embeddings at `POST /rag/ask`. Optional LLM generation requires `OPENAI_API_KEY`.
-- Synthetic SQLite data and three allowlisted analytics intents at `POST /analytics`.
-- Regex-based PII redaction and injection-pattern screening. These are **not comprehensive** safeguards.
-- Structured audit events emitted through Python logging; no durable audit storage yet.
-- CI unit tests.
+## Running components
+- Python FastAPI API: authentication, request validation and role enforcement.
+- Java Spring Boot: demonstration HTTP gateway. Access tokens are validated downstream in FastAPI.
+- Retrieval: baseline TF-IDF and optional Sentence Transformers embeddings with OpenAI-compatible grounded response generation.
+- Analytics: fixed query intents, parameterized predicates and synthetic SQLite or PostgreSQL.
+- Persistent audit: SQLite or PostgreSQL writes to audit_events, storing event actor, action and outcome without full prompts.
+- Identity: local demo JWT or issuer-configured RS256 OIDC token verification with JWKS.
+- 64 parameterized regression cases plus baseline tests and a GitHub Actions pytest workflow.
 
 ## Trust boundaries
-1. Treat documents, user input and model output as untrusted.
-2. Verify JWT identity at the API. Real deployment needs an external identity provider and rotated secrets.
-3. Enforce data permissions server-side. No model-driven authorization.
-4. Never allow arbitrary SQL from users or LLMs.
-5. Avoid PII in external LLM requests; replace demo redaction with validated DLP.
-6. Document-level entitlements, tenant-scoped indexing, durable audits and network controls are **not implemented**.
-7. Model-generated citations are not automatically validated; use output-level citation verification before production.
+1. Never use model output to authorize tools or database access.
+2. SQL aggregation templates use a fixed allowlist; parameters are bound by the DB driver.
+3. Access verification occurs in FastAPI; the Java gateway forwards tokens but does not independently verify them.
+4. OIDC verification checks signature, issuer, audience and expiry. Provider setup and claim mapping must be configured.
+5. The included regex redaction and injection-pattern screening are defense-in-depth only and are not sufficient for production DLP.
+6. Source IDs attached to LLM responses identify retrieved passages; claims are not independently verified against cited passages.
+7. Data sources are synthetic. This repository is not connected to confidential company or customer information.
+8. Production PostgreSQL must use least-privilege, separate analytics/audit accounts, network isolation and rotation of credentials.
 
-## Next steps
-- Replace in-memory TF-IDF/indexing with a versioned vector store (FAISS/pgvector).
-- Add document parsing and chunking from real synthetic PDF and JSON datasets.
-- Add metadata-filtered retrieval and reranking.
-- Add Spring Boot business gateway with a real OAuth2/OIDC provider.
-- Integrate PostgreSQL read-only roles with tenant isolation.
-- Add the actual 64-case labeled evaluation suite with measured retrieval/answer/safety metrics.
-- Run load, security and privacy testing before any real-world use.
+## Scope of the 64-case suite
+The 64 parameterized cases exercise 16 retrieval examples, 16 synthetic analytics cases,
+16 disallowed request patterns and 16 analyst/viewer access conditions. The cases are
+reproducible regression checks, not independent LLM grounding or model accuracy measurements.
 
-This repo does not contain proprietary Oracle code or customer data.
+## Deployment hardening still required
+- Persist the vector index to FAISS/pgvector or another vector database for larger-scale search.
+- Add ingestion for document PDFs, JSON and metadata-aware chunking with document-level entitlements.
+- Add tenant-scoped retrieval and data authorization.
+- Add response-grounding/citation validation and labeled LLM evaluation metrics.
+- Apply robust PII detection, red-team testing, operational tracing and rate limiting.
+- Add Spring gateway-level OIDC validation, consistent error mapping and telemetry.
+- Separate PostgreSQL read-only analytics and insert-only audit accounts.
+- Validate cloud deployment and disaster-recovery controls before production use.
+
+This is a portfolio demonstration, not an Oracle or other institutional deployment.
