@@ -1,4 +1,4 @@
-import logging
+"""Payment operations copilot API, permission checks and durable audits."""
 from datetime import date
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
@@ -6,12 +6,11 @@ from pydantic import BaseModel, Field
 from .security import issue_token, current_user, require_analyst, redact, unsafe_request
 from .retrieval import answer
 from .analytics import run_analytics
-
+from .audit import audit_event
 from .llm_rag import router as rag_router
 
-app = FastAPI(title="AI Payments Operations Copilot", version="0.1.0")
+app = FastAPI(title="AI Payments Operations Copilot", version="0.2.0")
 app.include_router(rag_router)
-logger = logging.getLogger("copilot.audit")
 
 class Question(BaseModel):
     question: str = Field(min_length=3, max_length=2000)
@@ -31,15 +30,18 @@ def token(form: OAuth2PasswordRequestForm = Depends()):
 @app.post("/ask")
 def ask(request: Question, user: dict = Depends(current_user)):
     if unsafe_request(request.question):
-        logger.warning("blocked_request user=%s", user["username"])
+        audit_event(user["username"], "knowledge_query", "blocked")
         raise HTTPException(status_code=400, detail="Request blocked by safety policy")
-    logger.info("knowledge_query user=%s", user["username"])
-    return answer(redact(request.question))
+    result = answer(redact(request.question))
+    audit_event(user["username"], "knowledge_query", "success")
+    return result
 
 @app.post("/analytics")
 def analytics(request: AnalyticsRequest, user: dict = Depends(require_analyst)):
-    logger.info("analytics_query user=%s intent=%s", user["username"], request.intent)
     try:
-        return run_analytics(request.intent, request.business_date)
+        result = run_analytics(request.intent, request.business_date)
     except ValueError as exc:
+        audit_event(user["username"], "analytics_query", "rejected", request.intent[:80])
         raise HTTPException(status_code=400, detail=str(exc))
+    audit_event(user["username"], "analytics_query", "success", request.intent)
+    return result
