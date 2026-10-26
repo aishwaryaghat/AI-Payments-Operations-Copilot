@@ -7,7 +7,10 @@ from .security import issue_token, current_user, require_analyst, redact, unsafe
 from .retrieval import answer
 from .analytics import run_analytics
 
+from .llm_rag import router as rag_router
+
 app = FastAPI(title="AI Payments Operations Copilot", version="0.1.0")
+app.include_router(rag_router)
 logger = logging.getLogger("copilot.audit")
 
 class Question(BaseModel):
