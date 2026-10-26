@@ -4,11 +4,11 @@ A **synthetic-data demonstration** of a secure payment-operations assistant. It 
 
 ## Features
 - Python FastAPI REST API with JWT authentication and role-based access.
-- Local TF-IDF semantic-style retrieval (no external model, network, or API key needed) with document citations. Swap the retriever for embeddings/vector DB in production.
+- Local TF-IDF retrieval (no external model, network, or API key needed) with document citations. Swap the retriever for embeddings/vector DB in production.
 - Approved read-only SQLite analytics templates for synthetic transactions.
 - PII redaction, prompt-injection pattern checks, request audit records.
 - Automated tests for retrieval, analytics, authentication and safety.
-- Java Spring Boot gateway scaffold can be added independently.
+- Java Spring Boot gateway scaffold in `gateway/` forwards authenticated API calls to FastAPI.\n- Optional Sentence Transformers vector embeddings and OpenAI-compatible grounded generation at `POST /rag/ask`.
 
 ## Quick start
 ```bash
@@ -43,5 +43,20 @@ Client -> FastAPI JWT/RBAC -> request classifier
                  -> audit log and redaction
 ```
 
+## Optional embedding-based RAG
+```bash
+pip install -r requirements-rag.txt
+# Default embedding model downloads weights on first use.
+# Optionally set OPENAI_API_KEY to enable text generation;
+# without it, /rag/ask returns retrieved citations only.
+```
+Use `POST /rag/ask` with a bearer token and JSON `{"question":"How should ACH files be validated?","top_k":3}`.
+
+## Java gateway
+```bash
+mvn -f gateway/pom.xml spring-boot:run
+```
+See `gateway/README.md` for its authentication limitations.
+
 ## Limitations
-This implementation is intentionally minimal and runnable offline. It uses TF-IDF, not an embedding model or generative LLM; therefore it is a **retrieval-based prototype**, not a fully deployed LLM RAG system. SQLite is a synthetic demo database, not PostgreSQL. No Java/Spring Boot implementation is included in this initial version. The test suite is a baseline, **not the 64-case suite** claimed in the resume. Add real embeddings, LLM generation, a persistent audit store, production identity provider, and a vetted 64-case benchmark before making those claims about this repository.
+This implementation is intentionally minimal and runnable offline. The default endpoint uses TF-IDF; an optional second endpoint uses real embeddings and configurable LLM generation. Neither is a validated production financial system. SQLite is a synthetic demo database, not PostgreSQL. A basic Java/Spring Boot forwarding gateway is included. The test suite is a baseline, **not the 64-case suite** claimed in the resume. Add real embeddings, LLM generation, a persistent audit store, production identity provider, and a vetted 64-case benchmark before making those claims about this repository.
