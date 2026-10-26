@@ -37,10 +37,15 @@ def document_vectors():
 def retrieve_embeddings(question: str, top_k: int = 3) -> list[dict[str, Any]]:
     import numpy as np
     query_vector = embedding_model().encode([question], normalize_embeddings=True)[0]
-    scores = np.asarray(document_vectors()) @ np.asarray(query_vector)
-    ranked = np.argsort(-scores)[:top_k]
-    return [{**DOCS[int(i)], "score": float(scores[i])}
-            for i in ranked if float(scores[i]) >= float(os.getenv("COPILOT_MIN_SIMILARITY", "0.25"))]
+    from .vector_store import nearest
+    hits = nearest(
+        query_vector, document_vectors(),
+        [d["title"] + ": " + d["text"] for d in DOCS],
+        os.getenv("COPILOT_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
+        top_k
+    )
+    return [{**DOCS[i], "score": score}
+            for i, score in hits if score >= float(os.getenv("COPILOT_MIN_SIMILARITY", "0.25"))]
 
 def generate_answer(question: str, passages: list[dict[str, Any]]) -> str:
     # Retrieval is usable without API credentials; generation is opt-in.
