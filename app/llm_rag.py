@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from .security import current_user, redact, unsafe_request
 from .retrieval import DOCS
+from .audit import audit_event
 
 router = APIRouter(prefix="/rag", tags=["Embedding-based RAG"])
 
@@ -74,6 +75,7 @@ def generate_answer(question: str, passages: list[dict[str, Any]]) -> str:
 @router.post("/ask")
 def ask_rag(request: RAGQuestion, user: dict = Depends(current_user)):
     if unsafe_request(request.question):
+        audit_event(user["username"], "rag_query", "blocked")
         raise HTTPException(status_code=400, detail="Request blocked by safety policy")
     question = redact(request.question)
     try:
@@ -81,12 +83,14 @@ def ask_rag(request: RAGQuestion, user: dict = Depends(current_user)):
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     if not passages:
+        audit_event(user["username"], "rag_query", "no_evidence")
         return {"answer": "No sufficiently relevant evidence was found.", "citations": []}
     try:
         answer = generate_answer(question, passages)
     except Exception:
         # Do not expose model/API credentials or untrusted upstream error details.
         raise HTTPException(status_code=502, detail="LLM provider unavailable")
+    audit_event(user["username"], "rag_query", "success")
     return {
         "answer": redact(answer),
         "citations": [{"id": p["id"], "title": p["title"], "score": round(p["score"], 4)}
